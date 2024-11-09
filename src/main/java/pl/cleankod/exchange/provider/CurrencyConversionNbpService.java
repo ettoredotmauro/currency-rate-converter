@@ -9,13 +9,19 @@ import pl.cleankod.util.CurrencyConversions;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.Currency;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CurrencyConversionNbpService implements CurrencyConversionService {
     private final ExchangeRatesNbpClient exchangeRatesNbpClient;
+    private final Map<String, CachedData> exchangeRateCache = new ConcurrentHashMap<>();
+    private final Long cacheRefresh;
 
-    public CurrencyConversionNbpService(ExchangeRatesNbpClient exchangeRatesNbpClient) {
+    public CurrencyConversionNbpService(ExchangeRatesNbpClient exchangeRatesNbpClient, Long cacheRefresh) {
         this.exchangeRatesNbpClient = exchangeRatesNbpClient;
+        this.cacheRefresh = cacheRefresh;
     }
 
     @Override
@@ -25,17 +31,27 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
         }
 
         try {
-            // Fetch rate from external service
-            RateWrapper rateWrapper = exchangeRatesNbpClient.fetch("A", targetCurrency.getCurrencyCode());
-            if (rateWrapper == null || rateWrapper.rates().isEmpty()) {
-                throw new CurrencyConversionServiceException("No exchange rate available for currency: " + targetCurrency.getCurrencyCode());
+            CachedData cachedData = exchangeRateCache.get(targetCurrency.getCurrencyCode());
+            BigDecimal midRate;
+
+            // If the cached rate is null or is more then 10 minutes old, then fetch it
+            if (cachedData == null || Instant.now().isAfter(cachedData.fetchedTime.plusSeconds(cacheRefresh))) {
+                RateWrapper rateWrapper = exchangeRatesNbpClient.fetch("A", targetCurrency.getCurrencyCode());
+                if (rateWrapper == null || rateWrapper.rates().isEmpty()) {
+                    throw new CurrencyConversionServiceException("No exchange rate available for currency: " + targetCurrency.getCurrencyCode());
+                }
+                midRate = rateWrapper.rates().get(0).mid();
+                exchangeRateCache.put(targetCurrency.getCurrencyCode(), new CachedData(midRate, Instant.now()));
+            } else {
+                midRate = cachedData.rate;
             }
 
-            BigDecimal midRate = rateWrapper.rates().get(0).mid();
             BigDecimal calculatedRate = CurrencyConversions.convert(money.amount(), midRate, RoundingMode.HALF_DOWN);
             return new Money(calculatedRate, targetCurrency);
         } catch (Exception ex) {
             throw new CurrencyConversionServiceException("Failed to convert currency: " + ex.getMessage(), ex);
         }
     }
+
+    private record CachedData(BigDecimal rate, Instant fetchedTime) {}
 }

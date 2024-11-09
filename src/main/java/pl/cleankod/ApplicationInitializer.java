@@ -45,8 +45,10 @@ public class ApplicationInitializer {
     }
 
     @Bean
-    CurrencyConversionService currencyConversionService(ExchangeRatesNbpClient exchangeRatesNbpClient) {
-        return new CurrencyConversionNbpService(exchangeRatesNbpClient);
+    CurrencyConversionService currencyConversionService(Environment environment, ExchangeRatesNbpClient exchangeRatesNbpClient) {
+        Long cacheRefresh = environment.getRequiredProperty("nbp-api.cache.refresh-ms", Long.class);
+
+        return new CurrencyConversionNbpService(exchangeRatesNbpClient, cacheRefresh);
     }
 
     @Bean
