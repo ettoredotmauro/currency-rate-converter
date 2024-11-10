@@ -47,8 +47,10 @@ public class ApplicationInitializer {
     @Bean
     CurrencyConversionService currencyConversionService(Environment environment, ExchangeRatesNbpClient exchangeRatesNbpClient) {
         Long cacheRefresh = environment.getRequiredProperty("nbp-api.cache.refresh-ms", Long.class);
+        Long failureTimeout = environment.getRequiredProperty("nbp-api.circuit-breaker.failure-timeout-ms", Long.class);
+        Integer failureThreshold = environment.getRequiredProperty("nbp-api.circuit-breaker.failure-threshold", Integer.class);
 
-        return new CurrencyConversionNbpService(exchangeRatesNbpClient, cacheRefresh);
+        return new CurrencyConversionNbpService(exchangeRatesNbpClient, cacheRefresh, failureTimeout, failureThreshold);
     }
 
     @Bean
