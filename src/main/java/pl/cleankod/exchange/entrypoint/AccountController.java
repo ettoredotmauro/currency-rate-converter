@@ -1,5 +1,7 @@
 package pl.cleankod.exchange.entrypoint;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pl.cleankod.exchange.core.domain.Account;
@@ -20,6 +22,12 @@ public class AccountController {
         this.accountService = accountService;
     }
 
+    @Operation(summary = "Find an account by ID",
+            description = "Retrieves an account based on the provided account ID.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "Account found"),
+                    @ApiResponse(responseCode = "404", description = "Account not found")
+            })
     @GetMapping(path = "/{id}")
     public ResponseEntity<Account> findAccountById(@PathVariable String id, @RequestParam(required = false) String currency) {
         String traceId = UUID.randomUUID().toString();
@@ -29,6 +37,12 @@ public class AccountController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "Find an account by number",
+            description = "Retrieves an account based on the provided account number.",
+            responses = {
+                    @ApiResponse(responseCode = "200", description = "Account found"),
+                    @ApiResponse(responseCode = "404", description = "Account not found")
+            })
     @GetMapping(path = "/number={number}")
     public ResponseEntity<Account> findAccountByNumber(@PathVariable String number, @RequestParam(required = false) String currency) {
         String traceId = UUID.randomUUID().toString();
