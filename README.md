@@ -78,3 +78,12 @@ Also, value-objects are responsible for a little more than just plain data holdi
 * Integration tests with the real NBP API.
 * Replace Spring Framework with a different one.
 * The proposed architecture is not perfect. Suggest improvements.
+
+### Architecture improvements
+* Use an asynchronous rates fetching, using for example a Scheduler
+* Add metrics about system requests, cache hit ratio or system shortage frequency (from the circuit-breaker implementation)
+* 
+
+### Possible refactoring to be implemented
+* Increase modularity extracting the Caching in a separate class to be instanced/used in the NBP API
+* Increase modularity/reusability extracting the Circuit-breaker in a separate class 
