@@ -1,5 +1,6 @@
 package pl.cleankod.exchange.core.domain;
 
+import pl.cleankod.exchange.core.dto.AccountDto;
 import pl.cleankod.util.Preconditions;
 
 import java.util.UUID;
@@ -36,5 +37,9 @@ public record Account(Id id, Number number, Money balance) {
         public static Number of(String value) {
             return new Number(value);
         }
+    }
+
+    public AccountDto toDto() {
+        return new AccountDto(id.value().toString(), number.value(), balance.toDto());
     }
 }

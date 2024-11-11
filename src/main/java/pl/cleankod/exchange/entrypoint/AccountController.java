@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pl.cleankod.exchange.core.domain.Account;
+import pl.cleankod.exchange.core.dto.AccountDto;
 import pl.cleankod.exchange.service.AccountService;
 
 import java.net.URLDecoder;
@@ -29,10 +30,11 @@ public class AccountController {
                     @ApiResponse(responseCode = "404", description = "Account not found")
             })
     @GetMapping(path = "/{id}")
-    public ResponseEntity<Account> findAccountById(@PathVariable String id, @RequestParam(required = false) String currency) {
+    public ResponseEntity<AccountDto> findAccountById(@PathVariable String id, @RequestParam(required = false) String currency) {
         String traceId = UUID.randomUUID().toString();
         Currency currencyObj = currency != null ? Currency.getInstance(currency) : null;
         return accountService.findAccountById(Account.Id.of(id), currencyObj, traceId)
+                .map(Account::toDto)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -44,11 +46,12 @@ public class AccountController {
                     @ApiResponse(responseCode = "404", description = "Account not found")
             })
     @GetMapping(path = "/number={number}")
-    public ResponseEntity<Account> findAccountByNumber(@PathVariable String number, @RequestParam(required = false) String currency) {
+    public ResponseEntity<AccountDto> findAccountByNumber(@PathVariable String number, @RequestParam(required = false) String currency) {
         String traceId = UUID.randomUUID().toString();
         Account.Number accountNumber = Account.Number.of(URLDecoder.decode(number, StandardCharsets.UTF_8));
         Currency currencyObj = currency != null ? Currency.getInstance(currency) : null;
         return accountService.findAccountByNumber(accountNumber, currencyObj, traceId)
+                .map(Account::toDto)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

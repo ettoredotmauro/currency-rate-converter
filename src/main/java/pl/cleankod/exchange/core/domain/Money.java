@@ -1,5 +1,6 @@
 package pl.cleankod.exchange.core.domain;
 
+import pl.cleankod.exchange.core.dto.MoneyDto;
 import pl.cleankod.exchange.core.gateway.CurrencyConversionService;
 import pl.cleankod.util.Preconditions;
 
@@ -22,5 +23,9 @@ public record Money(BigDecimal amount, Currency currency) {
 
     public Money convert(CurrencyConversionService currencyConverter, Currency targetCurrency, String traceId) {
         return currencyConverter.convert(this, targetCurrency, traceId);
+    }
+
+    public MoneyDto toDto() {
+        return new MoneyDto(amount().toString(), currency().getCurrencyCode());
     }
 }
