@@ -7,32 +7,25 @@ import pl.cleankod.exchange.core.gateway.CurrencyConversionService;
 import pl.cleankod.exchange.provider.nbp.CurrencyConversionServiceException;
 import pl.cleankod.exchange.provider.nbp.ExchangeRatesNbpClient;
 import pl.cleankod.exchange.provider.nbp.model.RateWrapper;
+import pl.cleankod.util.CircuitBreaker;
 import pl.cleankod.util.CurrencyConversions;
 import pl.cleankod.util.ExchangeRateCache;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.util.Currency;
 
 public class CurrencyConversionNbpService implements CurrencyConversionService {
     private final ExchangeRatesNbpClient exchangeRatesNbpClient;
     private final ExchangeRateCache exchangeRateCache;
-
-    private final Long failureTimeout;
-    private final Integer failureThreshold;
-
-    private CircuitState circuitState = CircuitState.CLOSED;
-    private int failureCount = 0;
-    private Instant lastFailureTime = Instant.now();
+    private final CircuitBreaker circuitBreaker;
 
     private static final Logger logger = LoggerFactory.getLogger(CurrencyConversionNbpService.class);
 
     public CurrencyConversionNbpService(ExchangeRatesNbpClient exchangeRatesNbpClient, Long cacheRefresh, Long failureTimeout, Integer failureThreshold) {
         this.exchangeRatesNbpClient = exchangeRatesNbpClient;
         this.exchangeRateCache = new ExchangeRateCache(cacheRefresh);
-        this.failureTimeout = failureTimeout;
-        this.failureThreshold = failureThreshold;
+        this.circuitBreaker = new CircuitBreaker(failureTimeout, failureThreshold);
 
         logger.info("CurrencyConversionNbpService initialized with cacheRefresh: {}, failureTimeout: {}, failureThreshold: {}",
                 cacheRefresh, failureTimeout, failureThreshold);
@@ -47,14 +40,9 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
             throw new CurrencyConversionServiceException("Money and target currency must not be null");
         }
 
-        if (circuitState == CircuitState.OPEN) {
-            if (Instant.now().isAfter(lastFailureTime.plusMillis(failureTimeout))) {
-                circuitState = CircuitState.HALF_OPEN;
-                logger.debug("{} - Attempting to reconnect to the service", traceId);
-            } else {
-                logger.error("{} - Service is unavailable", traceId);
-                throw new CurrencyConversionServiceException("Service is unavailable");
-            }
+        if (!circuitBreaker.isAvailable()) {
+            logger.error("{} - Service is unavailable", traceId);
+            throw new CurrencyConversionServiceException("Service is unavailable");
         }
 
         try {
@@ -71,7 +59,7 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
                 exchangeRateCache.putRate(targetCurrency.getCurrencyCode(), midRate);
                 logger.info("{} - Retrieved new exchange rate {} for currency {}", traceId, midRate, targetCurrency.getCurrencyCode());
 
-                failureCount = 0;
+                circuitBreaker.reset();
             } else {
                 logger.info("{} - Using cached exchange rate {} for currency {}", traceId, midRate, targetCurrency.getCurrencyCode());
             }
@@ -81,22 +69,9 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
 
             return new Money(convertedAmount, targetCurrency);
         } catch (Exception ex) {
-            failureCount++;
-            lastFailureTime = Instant.now();
+            circuitBreaker.recordFailure();
             logger.error("{} - Currency conversion failed: {}", traceId, ex.getMessage(), ex);
-
-            if (failureCount >= failureThreshold) {
-                circuitState = CircuitState.OPEN;
-                logger.warn("{} - Too many failures while connecting [{} failures]: service unavailable)", traceId, failureCount);
-            }
-
             throw new CurrencyConversionServiceException("Failed to convert currency: " + ex.getMessage(), ex);
         }
-    }
-
-    private enum CircuitState {
-        CLOSED,
-        OPEN,
-        HALF_OPEN
     }
 }
