@@ -8,18 +8,17 @@ import pl.cleankod.exchange.provider.nbp.CurrencyConversionServiceException;
 import pl.cleankod.exchange.provider.nbp.ExchangeRatesNbpClient;
 import pl.cleankod.exchange.provider.nbp.model.RateWrapper;
 import pl.cleankod.util.CurrencyConversions;
+import pl.cleankod.util.ExchangeRateCache;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Currency;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class CurrencyConversionNbpService implements CurrencyConversionService {
     private final ExchangeRatesNbpClient exchangeRatesNbpClient;
-    private final Map<String, CachedData> exchangeRateCache = new ConcurrentHashMap<>();
-    private final Long cacheRefresh;
+    private final ExchangeRateCache exchangeRateCache;
+
     private final Long failureTimeout;
     private final Integer failureThreshold;
 
@@ -31,7 +30,7 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
 
     public CurrencyConversionNbpService(ExchangeRatesNbpClient exchangeRatesNbpClient, Long cacheRefresh, Long failureTimeout, Integer failureThreshold) {
         this.exchangeRatesNbpClient = exchangeRatesNbpClient;
-        this.cacheRefresh = cacheRefresh;
+        this.exchangeRateCache = new ExchangeRateCache(cacheRefresh);
         this.failureTimeout = failureTimeout;
         this.failureThreshold = failureThreshold;
 
@@ -59,10 +58,9 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
         }
 
         try {
-            CachedData cachedData = exchangeRateCache.get(targetCurrency.getCurrencyCode());
-            BigDecimal midRate;
+            BigDecimal midRate = exchangeRateCache.getRate(targetCurrency.getCurrencyCode());
 
-            if (cachedData == null || Instant.now().isAfter(cachedData.fetchedTime.plusSeconds(cacheRefresh))) {
+            if (midRate == null) {
                 logger.debug("{} - Retrieving new exchange rate for currency {}", traceId, targetCurrency.getCurrencyCode());
                 RateWrapper rateWrapper = exchangeRatesNbpClient.fetch("A", targetCurrency.getCurrencyCode());
                 if (rateWrapper == null || rateWrapper.rates().isEmpty()) {
@@ -70,12 +68,11 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
                     throw new CurrencyConversionServiceException("No exchange rate available for currency: " + targetCurrency.getCurrencyCode());
                 }
                 midRate = rateWrapper.rates().get(0).mid();
-                exchangeRateCache.put(targetCurrency.getCurrencyCode(), new CachedData(midRate, Instant.now()));
+                exchangeRateCache.putRate(targetCurrency.getCurrencyCode(), midRate);
                 logger.info("{} - Retrieved new exchange rate {} for currency {}", traceId, midRate, targetCurrency.getCurrencyCode());
 
                 failureCount = 0;
             } else {
-                midRate = cachedData.rate;
                 logger.info("{} - Using cached exchange rate {} for currency {}", traceId, midRate, targetCurrency.getCurrencyCode());
             }
 
@@ -96,8 +93,6 @@ public class CurrencyConversionNbpService implements CurrencyConversionService {
             throw new CurrencyConversionServiceException("Failed to convert currency: " + ex.getMessage(), ex);
         }
     }
-
-    private record CachedData(BigDecimal rate, Instant fetchedTime) {}
 
     private enum CircuitState {
         CLOSED,
